@@ -1,0 +1,57 @@
+name: wasel
+services:
+  postgres:
+    image: ${POSTGRES_IMAGE:-postgres:17}
+    pull_policy: never
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: wasel
+      POSTGRES_USER: wasel
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Run npm run setup:local first}
+    ports: ["127.0.0.1:5433:5432"]
+    volumes: ["wasel-postgres17:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wasel -d wasel"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  openwa:
+    image: ghcr.io/rmyndharis/openwa:latest
+    restart: unless-stopped
+    init: true
+    shm_size: 1gb
+    ports: ["127.0.0.1:2785:2785"]
+    environment:
+      NODE_ENV: production
+      PORT: 2785
+      API_MASTER_KEY: ${OPENWA_API_KEY:?Run npm run setup:local first}
+      ENGINE_TYPE: whatsapp-web.js
+      AUTO_START_SESSIONS: "true"
+      DATABASE_TYPE: sqlite
+      DATABASE_SYNCHRONIZE: "false"
+      ENABLE_SWAGGER: "true"
+      SERVE_DASHBOARD: "true"
+      CSP_UPGRADE_INSECURE_REQUESTS: "false"
+      CORS_ORIGINS: http://localhost:2785
+    volumes: ["wasel-openwa:/app/data"]
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      OPENWA_URL: http://openwa:2785
+    ports: ["3000:3000"]
+    depends_on:
+      postgres: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+volumes:
+  wasel-postgres17:
+  wasel-openwa:
