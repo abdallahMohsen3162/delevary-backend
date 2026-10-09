@@ -14,7 +14,7 @@ export function databaseOptions(config: AppConfig): DataSourceOptions {
     password: config.DB_PASSWORD,
     database: config.DB_NAME,
     entities,
-    synchronize: true,
+    synchronize: config.DB_SYNCHRONIZE === 'true',
     migrations: [
       InitialSchema1791490000000,
       VerificationRename1791600000000,

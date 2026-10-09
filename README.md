@@ -46,7 +46,7 @@ End-to-end tests require PostgreSQL 17. They create an isolated `wasel_it_<rando
 - `maps`: server-side Mapbox geocoding and attributed static maps; secret token never reaches mobile.
 - `orders`: draft/quote/publish trips, offers, assignment, lifecycle/history, text chat and tracking. Nearby discovery uses a parameterized Haversine query on standard PostgreSQL.
 - `messaging`: encrypted transactional outbox, retry worker, OpenWA and SMTP adapters.
-- `database`: TypeORM entities and initial migration. `synchronize: true` is enabled directly for the current development stage; automatic migrations are disabled.
+- `database`: TypeORM entities and initial migration. `DB_SYNCHRONIZE=true` enables local schema synchronization; it defaults to false. Automatic migrations are disabled.
 
 Feature modules register entities with `TypeOrmModule.forFeature(...)`. Services inject `Repository<Entity>` using `@InjectRepository(Entity)`. Transactions use the injected repository manager; no feature service injects `DataSource`. Controllers validate DTOs and delegate to services. Egyptian phone numbers are normalized. A phone/email belongs to one account and role. Passwords use salted scrypt. OTPs are purpose/role-bound, expire in five minutes, allow five attempts, and have request limits. Login/verification returns `access_token`, `token_type`, `expiresInSeconds`, `user`, and `needsLocation`. JWT access tokens expire in seven days. There are no sessions, refresh tokens or cookies. Password reset increments `users.token_version`, invalidating previous tokens. Logout deletes the local token; existing copies remain usable until expiry or password reset.
 
@@ -100,9 +100,29 @@ Every protected request sends `Authorization: Bearer <access_token>`. `AccessTok
 - `GET /riders/earnings`: completed-trip fare totals, not payment settlement.
 - `GET /notifications`, `POST /notifications/:id/read`: own in-app inbox.
 
+## Test push notification
+
+`GET /api/v1/notifications/test?fcm=<URL-encoded-FCM-token>` creates a fixed test notification in the user's history and queues it for the Firebase worker. Supply `x-notification-key: <NOTIFICATIONS_API_KEY>` as a header; no request body or user bearer token is required. The FCM token must already be registered by an active, push-enabled user through the mobile app. Unknown/unregistered tokens return 404. Invalid tokens return 400, incorrect/missing sender keys return 401, and missing Firebase/sender configuration returns 503. The endpoint allows five requests per minute per IP and returns `Cache-Control: no-store`.
+
+```powershell
+$headers = @{ 'x-notification-key' = '<NOTIFICATIONS_API_KEY>' }
+$fcm = [uri]::EscapeDataString('<FCM_TOKEN>')
+Invoke-RestMethod -Method Get -Uri "http://158.69.210.207:4000/api/v1/notifications/test?fcm=$fcm" -Headers $headers
+```
+
+A 202 response includes `notification`, `pushStatus: "queued"`, and `pushConfigured: true`. It acknowledges queueing, not device delivery; the worker checks the queue every three seconds. Each request creates a new test notification. The Firebase payload includes the notification ID and user ID required by the mobile foreground banner and Updates screen. Deploy the updated backend code before calling this URL on the VPS.
+
 ## Schema upgrades
 
-Restart the backend after updating. With `synchronize: true` configured directly, startup first applies the idempotent additive trip/token upgrade, preserving existing users/trips/pickups, renaming `verification` to `auth_verifications`, and dropping obsolete `sessions`. It then synchronizes entity metadata. Fresh databases run the complete migrations before synchronization. Automatic migrations are currently disabled (`migrationsRun: false`). Existing databases created by synchronization must be explicitly baselined before switching to migration-only deployment.
+With `DB_SYNCHRONIZE=true`, startup applies the trip/token upgrade (including removal of obsolete `sessions`) and then synchronizes entity metadata. Fresh databases run migrations before synchronization. Keep this setting false in production: startup then performs no schema upgrades, migrations, or synchronization. Prepare the schema separately in the dedicated Wasel database after review. Existing databases created by synchronization must be explicitly baselined before switching to migration-only deployment. Never point this application at another site's database.
+
+## Environment files
+
+`.env` is loaded automatically for local runs. `.example.env` is a local copy of the credential-free `.env.example` template. `.prod.env` contains production settings and is not loaded automatically: install it as `.env` in the VPS backend directory. Private environment files are excluded from Git and Docker build contexts. Production uses API port 4000 and the same-server OpenWA endpoint `http://127.0.0.1:2785`; its public dashboard is `http://158.69.210.207:2785`. These URLs are configuration targets, not deployment verification.
+
+`CORS_ORIGINS=*` permits any browser origin; comma-separated origins restrict browser access. Native mobile clients do not need CORS permission. `NOTIFICATIONS_API_KEY` is for trusted server callers only, never the mobile app. `OTP_SECRET` is not used by the current implementation.
+
+Firebase push needs the Admin service-account JSON's `project_id`, `client_email`, and `private_key`, mapped to the three `FIREBASE_*` variables. Android `google-services.json` and iOS `GoogleService-Info.plist` do not supply the private key. The private `.env` and `.prod.env` files contain the supplied Admin credentials; example files keep these fields empty. Credential loading alone does not verify device delivery or APNs setup. Store the private key in double quotes with escaped `\n` line breaks. See [Firebase Admin setup](https://firebase.google.com/docs/admin/setup#initialize_the_sdk).
 
 New tables have descriptive names: `pricing_rules`, `trip_status_history`, `trip_price_proposals`, `trip_messages`, `trip_live_locations`, `trip_location_history`, and `notifications`. `trips` remains the source of history. Saved destinations share `user_addresses` with one partial-unique default pickup per user.
 

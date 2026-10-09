@@ -5,6 +5,9 @@ node_modules
 .git
 .env
 .env.*
+.prod.end
+.prod.env
+.example.env
 env
 .artifacts
 .npm-cache

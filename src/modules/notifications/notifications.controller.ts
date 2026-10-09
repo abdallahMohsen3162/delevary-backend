@@ -1,4 +1,4 @@
-import { Body, CanActivate, Controller, Delete, ExecutionContext, Get, HttpCode, Inject, Injectable, Param, ParseUUIDPipe, Post, Put, Query, ServiceUnavailableException, UnauthorizedException, UseGuards } from '@nestjs/common';
+import { Body, CanActivate, Controller, Delete, ExecutionContext, Get, Header, HttpCode, Inject, Injectable, Param, ParseUUIDPipe, Post, Put, Query, ServiceUnavailableException, UnauthorizedException, UseGuards } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import type { Request } from 'express';
@@ -7,6 +7,7 @@ import { CurrentUser, Public, type Principal } from '../auth/security';
 import { DeviceTokenDto, NotificationHistoryDto, SendNotificationDto, SendNotificationQuery } from './notification.dto';
 import { NotificationsService } from './notifications.service';
 import { FirebasePushService } from './firebase-push.service';
+import { NotificationType } from './notification.entity';
 
 @Injectable()
 export class NotificationSenderGuard implements CanActivate {
@@ -27,6 +28,17 @@ export class NotificationsController {
   @Get() history(@CurrentUser() { user }: Principal, @Query() dto: NotificationHistoryDto) { return this.notifications.list(user.id, dto); }
   @Post('read-all') @HttpCode(200) readAll(@CurrentUser() { user }: Principal) { return this.notifications.readAll(user.id); }
   @Post(':id/read') @HttpCode(200) read(@CurrentUser() { user }: Principal, @Param('id', ParseUUIDPipe) id: string) { return this.notifications.read(user.id, id); }
+  @Public() @UseGuards(NotificationSenderGuard) @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @Get('test') @HttpCode(202) @Header('Cache-Control', 'no-store')
+  async testPush(@Query() query: SendNotificationQuery) {
+    if (!this.firebase.configured) throw new ServiceUnavailableException('Firebase push is not configured.');
+    const result = await this.notifications.sendToToken(query.fcm, {
+      type: NotificationType.SYSTEM,
+      title: 'Wasel test notification',
+      description: 'This is a test notification from Wasel. Open Updates to view it.',
+    });
+    return { ...result, pushConfigured: true };
+  }
   // Separate trusted-server authorization; no customer/rider can send arbitrary alerts.
   @Public() @UseGuards(NotificationSenderGuard) @Throttle({ default: { limit: 30, ttl: 60000 } })
   @Post('send') @HttpCode(202)

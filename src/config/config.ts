@@ -14,6 +14,7 @@ const schema = z.object({
   DB_NAME: z.string().default('wasel'),
   DB_USER: z.string().default('wasel'),
   DB_PASSWORD: z.string().min(12),
+  DB_SYNCHRONIZE: z.enum(['true', 'false']).default('false'),
   JWT_SECRET: z.string().min(32),
   MESSAGE_ENCRYPTION_KEY: z.string().regex(/^[a-f0-9]{64}$/i),
   OPENWA_URL: z.string().url(),

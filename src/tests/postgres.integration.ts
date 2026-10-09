@@ -52,6 +52,7 @@ export async function runIntegration() {
     await app.listen(0, '127.0.0.1');
     const base = `${await app.getUrl()}/api/v1`;
     const db = app.get(DataSource);
+    await db.runMigrations();
     // Exercise the local development synchronize path against the migrated schema too.
     await db.synchronize();
     app.get(MapsService).route = () =>
