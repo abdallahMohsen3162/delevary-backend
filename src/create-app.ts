@@ -13,7 +13,7 @@ export async function createApp(quiet = false) {
   const config = app.get<AppConfig>(CONFIG);
   app.use(helmet());
   app.enableCors({
-    origin: config.CORS_ORIGINS.split(',').map((origin) => origin.trim()),
+    origin: true,
     credentials: false,
   });
   app.setGlobalPrefix('api/v1');
