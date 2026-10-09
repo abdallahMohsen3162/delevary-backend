@@ -21,6 +21,8 @@ import {
   TrackingDto,
 } from './trip.dto';
 import { nextStatus, terminal } from './trip-policy';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '../notifications/notification.entity';
 
 @Injectable()
 export class TripsService {
@@ -30,6 +32,7 @@ export class TripsService {
     @InjectRepository(User) private readonly usersRepository: Repository<User>,
     private readonly context: UserContext,
     private readonly maps: MapsService,
+    private readonly notifications: NotificationsService,
   ) {}
   private get user() {
     return this.context.user;
@@ -99,15 +102,21 @@ export class TripsService {
       const ids = [trip.customerId, trip.riderId].filter(
         (id) => id && id !== this.user.id,
       );
-      for (const id of ids)
-        await manager.query(
-          'INSERT INTO notifications(user_id,trip_id,title) VALUES($1,$2,$3)',
-          [
-            id,
-            trip.id,
-            `Trip ${trip.status.toLowerCase().replaceAll('_', ' ')}`,
-          ],
-        );
+      for (const id of ids) {
+        if (!id) continue;
+        const titles: Record<string, string> = {
+          ASSIGNED: 'Your delivery is assigned', ARRIVING_PICKUP: 'Your rider is on the way',
+          AT_PICKUP: 'Your rider has arrived at pickup', PICKED_UP: 'Your package has been picked up',
+          AT_DESTINATION: 'Your rider has arrived at the destination', DELIVERED: 'Your package has been delivered',
+          CANCELLED: 'Delivery cancelled',
+        };
+        await this.notifications.enqueue(manager, id, {
+          tripId: trip.id,
+          type: ['ARRIVING_PICKUP', 'AT_PICKUP', 'AT_DESTINATION'].includes(trip.status) ? NotificationType.ARRIVAL : NotificationType.SYSTEM,
+          title: titles[trip.status] || 'Delivery update',
+          description: reason || 'Open the delivery to see its latest status and details.',
+        });
+      }
     }
   }
   async create(dto: CreateOrderDto) {
@@ -362,10 +371,10 @@ export class TripsService {
         "INSERT INTO trip_price_proposals(trip_id,proposed_by,amount_piasters,reason,expires_at) VALUES($1,$2,$3,$4,now()+interval '10 minutes') RETURNING id",
         [id, this.user.id, dto.amountPiasters, dto.reason || null],
       );
-      await manager.query(
-        'INSERT INTO notifications(user_id,trip_id,title) VALUES($1,$2,$3)',
-        [trip.customerId, id, 'New delivery price proposal'],
-      );
+      await this.notifications.enqueue(manager, trip.customerId, {
+        tripId: id, type: NotificationType.FINANCIAL, title: 'New delivery price proposal',
+        description: `A rider proposed EGP ${(dto.amountPiasters / 100).toFixed(2)}. Open your delivery to review it.`,
+      });
       return offer;
     });
   }
@@ -535,26 +544,5 @@ export class TripsService {
       ],
       trip.routeGeometry,
     );
-  }
-  async notifications() {
-    return this.tripsRepository.query<
-      {
-        id: string;
-        tripId: string;
-        title: string;
-        readAt: Date | null;
-        createdAt: Date;
-      }[]
-    >(
-      'SELECT id,trip_id AS "tripId",title,read_at AS "readAt",created_at AS "createdAt" FROM notifications WHERE user_id=$1 ORDER BY created_at DESC LIMIT 50',
-      [this.user.id],
-    );
-  }
-  async readNotification(id: string) {
-    await this.tripsRepository.query(
-      'UPDATE notifications SET read_at=now() WHERE id=$1 AND user_id=$2',
-      [id, this.user.id],
-    );
-    return { success: true };
   }
 }

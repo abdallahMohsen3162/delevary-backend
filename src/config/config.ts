@@ -27,6 +27,10 @@ const schema = z.object({
   SMTP_PASS: z.string().min(1),
   SMTP_FROM: z.string().min(1),
   CORS_ORIGINS: z.string().default('http://localhost:8090'),
+  NOTIFICATIONS_API_KEY: z.union([z.literal(''), z.string().min(32)]).default(''),
+  FIREBASE_PROJECT_ID: z.string().default(''),
+  FIREBASE_CLIENT_EMAIL: z.string().default(''),
+  FIREBASE_PRIVATE_KEY: z.string().default(''),
 });
 export type AppConfig = z.infer<typeof schema>;
 export const CONFIG = Symbol('CONFIG');

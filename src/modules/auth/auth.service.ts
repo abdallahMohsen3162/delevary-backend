@@ -5,7 +5,7 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Role, User } from '../users/user.entity';
 import {
@@ -67,6 +67,31 @@ export class AuthService {
       throw error;
     }
   }
+  private async claimFcmToken(
+    manager: EntityManager,
+    userId: string,
+    fcmToken: string,
+  ) {
+    // One active push destination per user. A fresh login proves device ownership,
+    // so it steals the installation from any previous account instead of conflicting.
+    await manager.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
+      fcmToken,
+    ]);
+    await manager.update(
+      User,
+      { fcmToken },
+      {
+        fcmToken: null,
+        fcmTokenUpdatedAt: new Date(),
+        pushEnabled: false,
+      },
+    );
+    await manager.update(
+      User,
+      { id: userId },
+      { fcmToken, fcmTokenUpdatedAt: new Date(), pushEnabled: true },
+    );
+  }
   async login(dto: LoginDto, role: Role) {
     const user = await this.usersRepository
       .createQueryBuilder('u')
@@ -104,6 +129,8 @@ export class AuthService {
             DeliveryChannel.WHATSAPP,
           )),
         };
+      if (dto.fcmToken)
+        await this.claimFcmToken(manager, current.id, dto.fcmToken);
       return this.tokens.create(manager, current);
     });
   }
@@ -125,6 +152,8 @@ export class AuthService {
         if (!user || !user.isActive) return null;
         user.phoneVerifiedAt = new Date();
         await manager.save(user);
+        if (dto.fcmToken)
+          await this.claimFcmToken(manager, user.id, dto.fcmToken);
         return this.tokens.create(manager, user);
       },
     );

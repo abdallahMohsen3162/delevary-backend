@@ -110,15 +110,3 @@ export class TripsController {
     return this.trips.track(id, dto);
   }
 }
-@Controller('notifications')
-export class NotificationsController {
-  constructor(private readonly trips: TripsService) {}
-  @Get() list() {
-    return this.trips.notifications();
-  }
-  @Post(':id/read') @HttpCode(200) read(
-    @Param('id', ParseUUIDPipe) id: string,
-  ) {
-    return this.trips.readNotification(id);
-  }
-}

@@ -77,12 +77,32 @@ export class TokenTripWorkflows1791700000000 implements MigrationInterface {
         accuracy double precision NOT NULL, recorded_at timestamptz NOT NULL, received_at timestamptz NOT NULL DEFAULT now()
       );
       CREATE INDEX IF NOT EXISTS trip_location_history_lookup ON trip_location_history(trip_id,recorded_at);
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS fcm_token text;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS fcm_token_updated_at timestamptz;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS push_enabled boolean NOT NULL DEFAULT false;
       CREATE TABLE IF NOT EXISTS notifications (
         id uuid PRIMARY KEY DEFAULT uuid_generate_v4(), user_id uuid NOT NULL REFERENCES users(id),
-        trip_id uuid NOT NULL REFERENCES trips(id), title varchar(150) NOT NULL, read_at timestamptz,
+        trip_id uuid REFERENCES trips(id), type varchar(20) NOT NULL DEFAULT 'system',
+        title varchar(150) NOT NULL, description text NOT NULL DEFAULT '',
+        client_request_id uuid, read_at timestamptz,
         created_at timestamptz NOT NULL DEFAULT now()
       );
+      ALTER TABLE notifications ADD COLUMN IF NOT EXISTS trip_id uuid REFERENCES trips(id);
+      ALTER TABLE notifications ALTER COLUMN trip_id DROP NOT NULL;
+      ALTER TABLE notifications ADD COLUMN IF NOT EXISTS type varchar(20) NOT NULL DEFAULT 'system';
+      ALTER TABLE notifications ADD COLUMN IF NOT EXISTS description text NOT NULL DEFAULT '';
+      ALTER TABLE notifications ADD COLUMN IF NOT EXISTS client_request_id uuid;
+      CREATE UNIQUE INDEX IF NOT EXISTS notifications_client_request ON notifications(client_request_id);
       CREATE INDEX IF NOT EXISTS notifications_user_lookup ON notifications(user_id,created_at DESC);
+      CREATE TABLE IF NOT EXISTS notification_push_deliveries (
+        id uuid PRIMARY KEY DEFAULT uuid_generate_v4(), notification_id uuid NOT NULL REFERENCES notifications(id) ON DELETE CASCADE,
+        status varchar(16) NOT NULL DEFAULT 'queued', attempts integer NOT NULL DEFAULT 0,
+        next_attempt_at timestamptz NOT NULL DEFAULT now(), locked_until timestamptz, lease_id uuid,
+        last_error_code varchar(100), provider_message_id text, sent_at timestamptz,
+        created_at timestamptz NOT NULL DEFAULT now()
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS notification_push_one_per_notification ON notification_push_deliveries(notification_id);
+      CREATE INDEX IF NOT EXISTS notification_push_due ON notification_push_deliveries(status,next_attempt_at);
       CREATE OR REPLACE FUNCTION enforce_trip_transition() RETURNS trigger LANGUAGE plpgsql AS $$
       BEGIN
         IF OLD.status IN ('DELIVERED','CANCELLED','FAILED') AND NEW IS DISTINCT FROM OLD THEN RAISE EXCEPTION 'Terminal trip is immutable'; END IF;

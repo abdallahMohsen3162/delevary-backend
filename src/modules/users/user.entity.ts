@@ -40,6 +40,9 @@ export class User {
   vehicleType!: Vehicle | null;
   @Column({ name: 'fcm_token', type: 'text', nullable: true, select: false })
   fcmToken!: string | null;
+  @Column({ name: 'fcm_token_updated_at', type: 'timestamptz', nullable: true })
+  fcmTokenUpdatedAt!: Date | null;
+  @Column({ name: 'push_enabled', default: false }) pushEnabled!: boolean;
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
   @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })

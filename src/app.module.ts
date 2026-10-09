@@ -16,6 +16,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { Public, AccessTokenGuard } from './modules/auth/security';
 import { CustomersModule } from './modules/customers/customers.module';
 import { RidersModule } from './modules/riders/riders.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 
 @Controller('health')
 class HealthController {
@@ -80,6 +81,7 @@ class HealthController {
     AuthModule,
     CustomersModule,
     RidersModule,
+    NotificationsModule,
   ],
   controllers: [HealthController],
   providers: [

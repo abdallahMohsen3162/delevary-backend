@@ -27,6 +27,11 @@ export class LoginDto {
   @Matches(/^\+201[0125]\d{8}$/)
   phone!: string;
   @IsString() @Length(10, 128) password!: string;
+  @IsOptional()
+  @IsString()
+  @Length(20, 4096)
+  @Matches(/^[A-Za-z0-9_:\-]+$/)
+  fcmToken?: string;
 }
 export class RegisterCustomerDto extends LoginDto {
   @Transform(({ value }: { value: unknown }) =>
@@ -51,6 +56,11 @@ export class ChallengeIdDto {
 }
 export class VerifyCodeDto extends ChallengeIdDto {
   @IsString() @Matches(/^\d{6}$/) code!: string;
+  @IsOptional()
+  @IsString()
+  @Length(20, 4096)
+  @Matches(/^[A-Za-z0-9_:\-]+$/)
+  fcmToken?: string;
 }
 export class ForgotPasswordDto {
   @Transform(({ value }: { value: unknown }) => normalizePhone(value))
